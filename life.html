@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>Particelle Vive 3.0</title>
+<style>
+html, body { margin:0; padding:0; overflow:hidden; height:100%; background:#000; font-family:sans-serif; }
+canvas { display:block; }
+#musicBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 10px 15px;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid #fff;
+  color: #fff;
+  cursor: pointer;
+  z-index: 10;
+  border-radius:5px;
+}
+#musicBtn:hover { background: rgba(255,255,255,0.4); }
+</style>
+</head>
+<body>
+<button id="musicBtn">Spegni Musica</button>
+<canvas id="c"></canvas>
+<audio id="bgMusic" src="https://www.bensound.com/bensound-music/bensound-creativeminds.mp3" loop autoplay></audio>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const music = document.getElementById('bgMusic');
+const musicBtn = document.getElementById('musicBtn');
+let musicOn = true;
+
+musicBtn.addEventListener('click', ()=>{
+  if(musicOn){ music.pause(); musicBtn.textContent = 'Accendi Musica'; }
+  else { music.play(); musicBtn.textContent = 'Spegni Musica'; }
+  musicOn = !musicOn;
+});
+
+let mouse = {x:canvas.width/2, y:canvas.height/2, down:false};
+let particles = [];
+
+class Particle {
+  constructor(x,y) {
+    this.x = x;
+    this.y = y;
+    this.vx = (Math.random()-0.5)*2;
+    this.vy = (Math.random()-0.5)*2;
+    this.size = Math.random()*4 + 2;
+    this.color = `hsl(${Math.random()*360},100%,50%)`;
+    this.shape = Math.random()<0.5 ? 'circle' : 'triangle';
+  }
+  move() {
+    this.x += this.vx;
+    this.y += this.vy;
+    if(this.x<0 || this.x>canvas.width) this.vx*=-1;
+    if(this.y<0 || this.y>canvas.height) this.vy*=-1;
+    let dx = this.x - mouse.x;
+    let dy = this.y - mouse.y;
+    let dist = Math.sqrt(dx*dx + dy*dy);
+    if(mouse.down && dist<100){ this.vx+=dx*0.02; this.vy+=dy*0.02; }
+  }
+  draw() {
+    ctx.beginPath();
+    if(this.shape==='circle') ctx.arc(this.x,this.y,this.size,0,Math.PI*2);
+    else if(this.shape==='triangle'){
+      ctx.moveTo(this.x,this.y-this.size);
+      ctx.lineTo(this.x-this.size,this.y+this.size);
+      ctx.lineTo(this.x+this.size,this.y+this.size);
+      ctx.closePath();
+    }
+    ctx.fillStyle=this.color;
+    ctx.shadowBlur=10;
+    ctx.shadowColor=this.color;
+    ctx.fill();
+  }
+}
+
+function spawnParticles(num){
+  for(let i=0;i<num;i++){
+    particles.push(new Particle(Math.random()*canvas.width, Math.random()*canvas.height));
+  }
+}
+
+spawnParticles(120);
+
+canvas.addEventListener('mousemove', e=>{mouse.x=e.clientX; mouse.y=e.clientY;});
+canvas.addEventListener('mousedown', ()=>{mouse.down=true;});
+canvas.addEventListener('mouseup', ()=>{mouse.down=false;});
+
+document.addEventListener('keydown', e=>{
+  if(e.key==='w') particles.forEach(p=>{p.vx*=1.5; p.vy*=1.5;});
+  if(e.key==='s') particles.forEach(p=>{p.vx*=0.7; p.vy*=0.7;});
+  if(e.key===' ') spawnParticles(20);
+});
+
+function animate(){
+  ctx.fillStyle='rgba(0,0,0,0.15)';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  for(let p of particles){ p.move(); p.draw(); }
+
+  for(let i=0;i<particles.length;i++){
+    for(let j=i+1;j<particles.length;j++){
+      let dx=particles[i].x-particles[j].x;
+      let dy=particles[i].y-particles[j].y;
+      let dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist<60){
+        ctx.beginPath();
+        ctx.moveTo(particles[i].x,particles[i].y);
+        ctx.lineTo(particles[j].x,particles[j].y);
+        ctx.strokeStyle=`hsla(${(Math.random()*360)},100%,80%,${1-dist/60})`;
+        ctx.lineWidth=1.5;
+        ctx.shadowBlur=5;
+        ctx.shadowColor=`hsla(${(Math.random()*360)},100%,80%,${1-dist/60})`;
+        ctx.stroke();
+
+        if(Math.random()<0.005){
+          particles[i].shape = particles[i].shape==='circle'?'triangle':'circle';
+          particles[j].shape = particles[j].shape==='circle'?'triangle':'circle';
+        }
+      }
+    }
+  }
+
+  requestAnimationFrame(animate);
+}
+
+animate();
+
+window.addEventListener('resize', ()=>{
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
+</script>
+</body>
+</html>
