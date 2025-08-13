@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gioco Ultra Mega Figo</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; color: #fff; text-align:center; }
+  canvas { display:block; margin:0 auto; background:#111; border:3px solid #fff; }
+  #overlay {
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    display:flex; justify-content:center; align-items:center;
+    flex-direction: column; background:rgba(0,0,0,0.8); font-size:2em; display:none;
+  }
+  button { font-size:1em; padding:10px 20px; margin-top:20px; cursor:pointer; }
+  h1 { margin:10px 0; }
+</style>
+</head>
+<body>
+<h1>Punti: <span id="score">0</span> | Livello: <span id="level">1</span></h1>
+<canvas id="gameCanvas" width="700" height="500"></canvas>
+<div id="overlay">
+  <div id="gameOverText">Game Over!</div>
+  <button onclick="restart()">Ricomincia</button>
+</div>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const scoreEl = document.getElementById('score');
+const levelEl = document.getElementById('level');
+
+let player = {x:100,y:100,size:30,trail:[],hue:0};
+let food = {x: randomX(), y: randomY(), size:20, hue: Math.random()*360};
+let bonuses = [];
+let enemies = [];
+let stars = Array.from({length:100},()=>({x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:Math.random()*2+1,speed:Math.random()*1.5+0.5}));
+let score=0, level=1, gameOver=false;
+let keys = {};
+
+document.addEventListener('keydown', e => keys[e.key] = true);
+document.addEventListener('keyup', e => keys[e.key] = false);
+
+function randomX(){ return Math.random()*(canvas.width-30); }
+function randomY(){ return Math.random()*(canvas.height-30); }
+
+function spawnEnemy(){ 
+  enemies.push({x:randomX(),y:randomY(),size:30,speed:2+hueOffset(),hue:Math.random()*360}); 
+}
+function spawnBonus(){ 
+  bonuses.push({x:randomX(),y:randomY(),size:15,hue:Math.random()*360,type:Math.random()<0.5?'slow':'points'}); 
+}
+function hueOffset(){ return Math.random()*1.5; }
+
+function update(){
+  if(gameOver) return;
+  let speed=5;
+  if(keys['ArrowUp'] && player.y>0) player.y -= speed;
+  if(keys['ArrowDown'] && player.y<canvas.height-player.size) player.y += speed;
+  if(keys['ArrowLeft'] && player.x>0) player.x -= speed;
+  if(keys['ArrowRight'] && player.x<canvas.width-player.size) player.x += speed;
+
+  // scia arcobaleno
+  player.trail.push({x:player.x+player.size/2,y:player.y+player.size/2,hue:player.hue,alpha:1});
+  if(player.trail.length>30) player.trail.shift();
+  player.trail.forEach(t=>t.alpha-=0.05);
+  player.hue = (player.hue+5)%360;
+
+  // collisione cibo
+  if(player.x < food.x+food.size &&
+     player.x+player.size > food.x &&
+     player.y < food.y+food.size &&
+     player.y+player.size > food.y){
+       score++; scoreEl.textContent=score;
+       food.x=randomX(); food.y=randomY(); food.hue=Math.random()*360;
+       if(score%5===0){ level++; levelEl.textContent=level; spawnEnemy(); }
+       if(score%8===0){ spawnBonus(); }
+       beep();
+  }
+
+  // collisione bonus
+  bonuses = bonuses.filter(b=>{
+    if(player.x < b.x+b.size && player.x+player.size>b.x && player.y<b.y+b.size && player.y+player.size>b.y){
+      if(b.type==='points'){ score+=3; scoreEl.textContent=score; beep(600); }
+      if(b.type==='slow'){ enemies.forEach(e=>e.speed=Math.max(1,e.speed-1)); beep(400); }
+      return false;
+    }
+    return true;
+  });
+
+  // nemici che inseguono
+  enemies.forEach(e=>{
+    let dx=player.x-e.x, dy=player.y-e.y;
+    let dist=Math.sqrt(dx*dx+dy*dy);
+    if(dist!==0){ e.x+=(dx/dist)*e.speed; e.y+=(dy/dist)*e.speed; }
+    e.hue=(e.hue+1)%360;
+    // collisione
+    if(player.x < e.x+e.size && player.x+player.size>e.x && player.y<e.y+e.size && player.y+player.size>e.y){
+      gameOver=true; overlay.style.display='flex'; shakeScreen();
+    }
+  });
+
+  // stelle sfondo
+  stars.forEach(s=>{ s.x-=s.speed; if(s.x<0)s.x=canvas.width; });
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // stelle
+  stars.forEach(s=>{ ctx.fillStyle='white'; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); });
+
+  // scia
+  player.trail.forEach(t=>{ ctx.fillStyle=`hsla(${t.hue},100%,50%,${t.alpha})`; ctx.beginPath(); ctx.arc(t.x,t.y,player.size/2,0,Math.PI*2); ctx.fill(); });
+
+  // giocatore
+  ctx.fillStyle=`hsl(${player.hue},100%,50%)`;
+  ctx.fillRect(player.x,player.y,player.size,player.size);
+
+  // cibo pulsante
+  ctx.fillStyle=`hsl(${food.hue},100%,50%)`;
+  let pulse = 5*Math.sin(Date.now()/200)+food.size;
+  ctx.fillRect(food.x,food.y,pulse,pulse);
+
+  // bonus
+  bonuses.forEach(b=>{
+    ctx.fillStyle=`hsl(${b.hue},100%,50%)`;
+    let size = b.size + 3*Math.sin(Date.now()/150);
+    ctx.beginPath(); ctx.arc(b.x+b.size/2, b.y+b.size/2, size,0,Math.PI*2); ctx.fill();
+  });
+
+  // nemici
+  enemies.forEach(e=>{ ctx.fillStyle=`hsl(${e.hue},100%,50%)`; ctx.fillRect(e.x,e.y,e.size,e.size); });
+}
+
+function loop(){ update(); draw(); requestAnimationFrame(loop); }
+
+function beep(freq){ 
+  const a=new (window.AudioContext||window.webkitAudioContext)();
+  const o=a.createOscillator();
+  o.type='square';
+  o.frequency.setValueAtTime(freq||300+score*10,a.currentTime);
+  o.connect(a.destination);
+  o.start();
+  o.stop(a.currentTime+0.1);
+}
+
+function shakeScreen(){
+  let t=0;
+  const interval = setInterval(()=>{
+    t++; canvas.style.transform = `translate(${Math.random()*12-6}px,${Math.random()*12-6}px) rotate(${Math.random()*0.1-0.05}rad)`;
+    if(t>20){ clearInterval(interval); canvas.style.transform=''; }
+  },20);
+}
+
+function restart(){
+  player.x=100; player.y=100; player.trail=[]; player.hue=0;
+  enemies=[]; bonuses=[];
+  score=0; level=1; gameOver=false;
+  scoreEl.textContent=score; levelEl.textContent=level;
+  overlay.style.display='none';
+  food.x=randomX(); food.y=randomY(); food.hue=Math.random()*360;
+}
+
+loop();
+</script>
+</body>
+</html>
